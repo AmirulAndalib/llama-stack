@@ -19,6 +19,7 @@ from llama_stack.apis.agents.openai_responses import (
     AllowedToolsFilter,
     ListOpenAIResponseInputItem,
     ListOpenAIResponseObject,
+    OpenAIDeleteResponseObject,
     OpenAIResponseInput,
     OpenAIResponseInputFunctionToolCallOutput,
     OpenAIResponseInputMessageContent,
@@ -73,7 +74,6 @@ from llama_stack.log import get_logger
 from llama_stack.models.llama.datatypes import ToolDefinition, ToolParamDefinition
 from llama_stack.providers.utils.inference.openai_compat import convert_tooldef_to_openai_tool
 from llama_stack.providers.utils.responses.responses_store import ResponsesStore
-from llama_stack.providers.utils.tools.mcp import invoke_mcp_tool, list_mcp_tools
 
 logger = get_logger(name=__name__, category="openai_responses")
 
@@ -574,6 +574,9 @@ class OpenAIResponsesImpl:
                 input=input,
             )
 
+    async def delete_openai_response(self, response_id: str) -> OpenAIDeleteResponseObject:
+        return await self.responses_store.delete_response_object(response_id)
+
     async def _convert_response_tools_to_chat_tools(
         self, tools: list[OpenAIResponseInputTool]
     ) -> tuple[
@@ -623,6 +626,8 @@ class OpenAIResponsesImpl:
                     raise ValueError(f"Tool {tool_name} not found")
                 chat_tools.append(make_openai_tool(tool_name, tool))
             elif input_tool.type == "mcp":
+                from llama_stack.providers.utils.tools.mcp import list_mcp_tools
+
                 always_allowed = None
                 never_allowed = None
                 if input_tool.allowed_tools:
@@ -756,7 +761,9 @@ class OpenAIResponsesImpl:
         error_exc = None
         result = None
         try:
-            if function.name in ctx.mcp_tool_to_server:
+            if ctx.mcp_tool_to_server and function.name in ctx.mcp_tool_to_server:
+                from llama_stack.providers.utils.tools.mcp import invoke_mcp_tool
+
                 mcp_tool = ctx.mcp_tool_to_server[function.name]
                 result = await invoke_mcp_tool(
                     endpoint=mcp_tool.server_url,
