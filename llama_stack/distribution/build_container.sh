@@ -96,7 +96,7 @@ FROM $container_base
 WORKDIR /app
 
 # We install the Python 3.12 dev headers and build tools so that any
-# C‑extension wheels (e.g. polyleven, faiss‑cpu) can compile successfully.
+# C-extension wheels (e.g. polyleven, faiss-cpu) can compile successfully.
 
 RUN dnf -y update && dnf install -y iputils git net-tools wget \
     vim-minimal python3.12 python3.12-pip python3.12-wheel \
@@ -153,12 +153,6 @@ get_python_cmd() {
         exit 1
     fi
 }
-
-# Add other required item commands generic to all containers
-add_to_container << EOF
-# Allows running as non-root user
-RUN mkdir -p /.llama/providers.d /.cache
-EOF
 
 if [ -n "$run_config" ]; then
   # Copy the run config to the build context since it's an absolute path
@@ -268,7 +262,7 @@ fi
 # Add other require item commands genearic to all containers
 add_to_container << EOF
 
-RUN chmod -R g+rw /app /.llama /.cache
+RUN mkdir -p /.llama /.cache && chmod -R g+rw /app /.llama /.cache
 EOF
 
 printf "Containerfile created successfully in %s/Containerfile\n\n" "$TEMP_DIR"

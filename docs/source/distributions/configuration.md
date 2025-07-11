@@ -56,8 +56,8 @@ shields: []
 server:
   port: 8321
   auth:
-    provider_type: "oauth2_token"
-    config:
+    provider_config:
+      type: "oauth2_token"
       jwks:
         uri: "https://my-token-issuing-svc.com/jwks"
 ```
@@ -67,7 +67,7 @@ Let's break this down into the different sections. The first section specifies t
 apis:
 - agents
 - inference
-- memory
+- vector_io
 - safety
 - telemetry
 ```
@@ -77,10 +77,10 @@ Next up is the most critical part: the set of providers that the stack will use 
 ```yaml
 providers:
   inference:
-  # provider_id is a string you can choose freely
+    # provider_id is a string you can choose freely
   - provider_id: ollama
     # provider_type is a string that specifies the type of provider.
-    # in this case, the provider for inference is ollama and it is run remotely (outside of the distribution)
+    # in this case, the provider for inference is ollama and it runs remotely (outside of the distribution)
     provider_type: remote::ollama
     # config is a dictionary that contains the configuration for the provider.
     # in this case, the configuration is the url of the ollama server
@@ -88,7 +88,7 @@ providers:
       url: ${env.OLLAMA_URL:=http://localhost:11434}
 ```
 A few things to note:
-- A _provider instance_ is identified with an (id, type, configuration) triplet.
+- A _provider instance_ is identified with an (id, type, config) triplet.
 - The id is a string you can choose freely.
 - You can instantiate any number of provider instances of the same type.
 - The configuration dictionary is provider-specific.
@@ -125,7 +125,7 @@ config:
 ```
 
 If the environment variable is not set, the default value `http://localhost:11434` will be used.
-Empty defaults are not allowed so `url: ${env.OLLAMA_URL:=}` will raise an error if the environment variable is not set.
+Empty defaults are allowed so `url: ${env.OLLAMA_URL:=}` will be set to `None` if the environment variable is not set.
 
 #### Conditional Values
 
@@ -139,8 +139,10 @@ config:
 
 If the environment variable is set, the value after `:+` will be used. If it's not set, the field
 will be omitted with a `None` value.
-So `${env.ENVIRONMENT:+}` is supported, it means that the field will be omitted if the environment
-variable is not set. It can be used to make a field optional and then enabled at runtime when desired.
+
+Do not use conditional values (`${env.OLLAMA_URL:+}`) for empty defaults (`${env.OLLAMA_URL:=}`).
+This will be set to `None` if the environment variable is not set.
+Conditional must only be used when the environment variable is set.
 
 #### Examples
 
@@ -185,7 +187,7 @@ The environment variable substitution system is type-safe:
 
 ## Resources
 
-Finally, let's look at the `models` section:
+Let's look at the `models` section:
 
 ```yaml
 models:
@@ -193,8 +195,9 @@ models:
   model_id: ${env.INFERENCE_MODEL}
   provider_id: ollama
   provider_model_id: null
+  model_type: llm
 ```
-A Model is an instance of a "Resource" (see [Concepts](../concepts/index)) and is associated with a specific inference provider (in this case, the provider with identifier `ollama`). This is an instance of a "pre-registered" model. While we always encourage the clients to always register models before using them, some Stack servers may come up a list of "already known and available" models.
+A Model is an instance of a "Resource" (see [Concepts](../concepts/index)) and is associated with a specific inference provider (in this case, the provider with identifier `ollama`). This is an instance of a "pre-registered" model. While we always encourage the clients to register models before using them, some Stack servers may come up a list of "already known and available" models.
 
 What's with the `provider_model_id` field? This is an identifier for the model inside the provider's model catalog. Contrast it with `model_id` which is the identifier for the same model for Llama Stack's purposes. For example, you may want to name "llama3.2:vision-11b" as "image_captioning_model" when you use it in your Stack interactions. When omitted, the server will set `provider_model_id` to be the same as `model_id`.
 
@@ -223,6 +226,8 @@ server:
 
 ### Authentication Configuration
 
+> **Breaking Change (v0.2.14)**: The authentication configuration structure has changed. The previous format with `provider_type` and `config` fields has been replaced with a unified `provider_config` field that includes the `type` field. Update your configuration files accordingly.
+
 The `auth` section configures authentication for the server. When configured, all API requests must include a valid Bearer token in the Authorization header:
 
 ```
@@ -237,8 +242,8 @@ The server can be configured to use service account tokens for authorization, va
 ```yaml
 server:
   auth:
-    provider_type: "oauth2_token"
-    config:
+    provider_config:
+      type: "oauth2_token"
       jwks:
         uri: "https://kubernetes.default.svc:8443/openid/v1/jwks"
         token: "${env.TOKEN:+}"
@@ -322,13 +327,25 @@ You can easily validate a request by running:
 curl -s -L -H "Authorization: Bearer $(cat llama-stack-auth-token)" http://127.0.0.1:8321/v1/providers
 ```
 
+#### GitHub Token Provider
+Validates GitHub personal access tokens or OAuth tokens directly:
+```yaml
+server:
+  auth:
+    provider_config:
+      type: "github_token"
+      github_api_base_url: "https://api.github.com"  # Or GitHub Enterprise URL
+```
+
+The provider fetches user information from GitHub and maps it to access attributes based on the `claims_mapping` configuration.
+
 #### Custom Provider
 Validates tokens against a custom authentication endpoint:
 ```yaml
 server:
   auth:
-    provider_type: "custom"
-    config:
+    provider_config:
+      type: "custom"
       endpoint: "https://auth.example.com/validate"  # URL of the auth endpoint
 ```
 
@@ -413,8 +430,8 @@ clients.
 server:
   port: 8321
   auth:
-    provider_type: custom
-    config:
+    provider_config:
+      type: custom
       endpoint: https://auth.example.com/validate
   quota:
     kvstore:

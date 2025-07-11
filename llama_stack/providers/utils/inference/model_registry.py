@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from llama_stack.apis.common.errors import UnsupportedModelError
 from llama_stack.apis.models import ModelType
 from llama_stack.models.llama.sku_list import all_registered_models
 from llama_stack.providers.datatypes import Model, ModelsProtocolPrivate
@@ -34,13 +35,16 @@ def get_huggingface_repo(model_descriptor: str) -> str | None:
 
 
 def build_hf_repo_model_entry(
-    provider_model_id: str, model_descriptor: str, additional_aliases: list[str] | None = None
+    provider_model_id: str,
+    model_descriptor: str,
+    additional_aliases: list[str] | None = None,
 ) -> ProviderModelEntry:
     aliases = [
         get_huggingface_repo(model_descriptor),
     ]
     if additional_aliases:
         aliases.extend(additional_aliases)
+    aliases = [alias for alias in aliases if alias is not None]
     return ProviderModelEntry(
         provider_model_id=provider_model_id,
         aliases=aliases,
@@ -81,15 +85,13 @@ class ModelRegistryHelper(ModelsProtocolPrivate):
 
     async def register_model(self, model: Model) -> Model:
         if not (supported_model_id := self.get_provider_model_id(model.provider_resource_id)):
-            raise ValueError(
-                f"Model '{model.provider_resource_id}' is not supported. Supported models are: {', '.join(self.alias_to_provider_id_map.keys())}"
-            )
+            raise UnsupportedModelError(model.provider_resource_id, self.alias_to_provider_id_map.keys())
         provider_resource_id = self.get_provider_model_id(model.model_id)
         if model.model_type == ModelType.embedding:
             # embedding models are always registered by their provider model id and does not need to be mapped to a llama model
             provider_resource_id = model.provider_resource_id
         if provider_resource_id:
-            if provider_resource_id != supported_model_id:  # be idemopotent, only reject differences
+            if provider_resource_id != supported_model_id:  # be idempotent, only reject differences
                 raise ValueError(
                     f"Model id '{model.model_id}' is already registered. Please use a different id or unregister it first."
                 )
